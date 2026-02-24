@@ -1,0 +1,1035 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>jobnova.ai · Mock Interview</title>
+
+  <!-- LiveKit JS SDK (Phase 4: voice connect/disconnect from demo.html) -->
+  <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
+
+  <style>
+    :root {
+      --bg0: #070A12;
+      --bg1: #0B1022;
+      --card: rgba(255, 255, 255, .06);
+      --card2: rgba(255, 255, 255, .09);
+      --stroke: rgba(255, 255, 255, .12);
+      --text: rgba(255, 255, 255, .92);
+      --muted: rgba(255, 255, 255, .68);
+      --muted2: rgba(255, 255, 255, .52);
+      --good: #44d19d;
+      --warn: #ffcc66;
+      --bad: #ff6b6b;
+      --accent: #7c5cff;
+      --accent2: #19d3ff;
+      --shadow: 0 18px 60px rgba(0, 0, 0, .45);
+      --radius: 18px;
+    }
+
+    * {
+      box-sizing: border-box
+    }
+
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+      color: var(--text);
+      background:
+        radial-gradient(1000px 600px at 15% 20%, rgba(124, 92, 255, .18), transparent 60%),
+        radial-gradient(900px 520px at 85% 15%, rgba(25, 211, 255, .14), transparent 55%),
+        radial-gradient(900px 700px at 55% 90%, rgba(68, 209, 157, .08), transparent 55%),
+        linear-gradient(180deg, var(--bg0), var(--bg1));
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Grain overlay */
+    .grain {
+      pointer-events: none;
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='220' height='220' filter='url(%23n)' opacity='.28'/%3E%3C/svg%3E");
+      opacity: .08;
+      mix-blend-mode: overlay;
+      animation: grain 6s steps(8) infinite;
+    }
+
+    @keyframes grain {
+      0% { transform: translate(0, 0) }
+      25% { transform: translate(-2%, 1%) }
+      50% { transform: translate(1%, -2%) }
+      75% { transform: translate(2%, 2%) }
+      100% { transform: translate(0, 0) }
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 22px 24px 14px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      user-select: none;
+    }
+
+    .logoDot {
+      width: 12px;
+      height: 12px;
+      border-radius: 999px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      box-shadow: 0 0 0 6px rgba(124, 92, 255, .12), 0 0 0 12px rgba(25, 211, 255, .06);
+      animation: pulse 2.8s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1) }
+      50% { transform: scale(1.18) }
+    }
+
+    .brandName {
+      font-weight: 700;
+      letter-spacing: .2px;
+      font-size: 18px;
+    }
+
+    .brandName span {
+      color: rgba(255, 255, 255, .75);
+      font-weight: 600;
+    }
+
+    .topRight {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .pill {
+      padding: 8px 10px;
+      border: 1px solid var(--stroke);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, .04);
+      backdrop-filter: blur(10px);
+    }
+
+    .statusDot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--muted2);
+      margin-right: 7px;
+    }
+
+    main {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 24px 28px;
+      display: grid;
+      grid-template-columns: 420px 1fr;
+      gap: 18px;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--stroke);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(14px);
+      overflow: hidden;
+      animation: floatIn .5s ease-out both;
+    }
+
+    @keyframes floatIn {
+      from { opacity: 0; transform: translateY(10px) }
+      to { opacity: 1; transform: translateY(0) }
+    }
+
+    .cardHeader {
+      padding: 16px 16px 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, .08);
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .cardHeader h3 {
+      margin: 0;
+      font-size: 14px;
+      letter-spacing: .2px;
+      color: rgba(255, 255, 255, .85);
+    }
+
+    .sub {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 12.5px;
+      line-height: 1.35;
+    }
+
+    .cardBody {
+      padding: 14px 16px 16px;
+    }
+
+    label {
+      display: block;
+      font-size: 12px;
+      color: var(--muted);
+      margin: 10px 0 6px;
+    }
+
+    input {
+      width: 100%;
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, .12);
+      background: rgba(0, 0, 0, .25);
+      color: var(--text);
+      outline: none;
+      transition: border .18s ease, transform .18s ease, background .18s ease;
+    }
+
+    input:focus {
+      border-color: rgba(124, 92, 255, .45);
+      background: rgba(0, 0, 0, .32);
+      transform: translateY(-1px);
+    }
+
+    .btnRow {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 14px;
+    }
+
+    button {
+      border: 0;
+      color: var(--text);
+      cursor: pointer;
+      padding: 12px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, .08);
+      border: 1px solid rgba(255, 255, 255, .12);
+      transition: transform .14s ease, background .14s ease, border .14s ease, box-shadow .14s ease;
+      font-weight: 600;
+      font-size: 13px;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+      background: rgba(255, 255, 255, .10);
+    }
+
+    button:active {
+      transform: translateY(0) scale(.99);
+    }
+
+    button[disabled] {
+      opacity: .45;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .primary {
+      background: linear-gradient(135deg, rgba(124, 92, 255, .95), rgba(25, 211, 255, .75));
+      border: 0;
+      box-shadow: 0 10px 28px rgba(124, 92, 255, .18);
+    }
+
+    .primary:hover {
+      box-shadow: 0 12px 34px rgba(124, 92, 255, .26);
+    }
+
+    .ghost {
+      background: transparent;
+      border: 1px solid rgba(255, 255, 255, .14);
+    }
+
+    .tiny {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 10px;
+      line-height: 1.4;
+    }
+
+    .metaGrid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .metaBox {
+      padding: 10px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, .05);
+      border: 1px solid rgba(255, 255, 255, .10);
+    }
+
+    .metaBox .k {
+      font-size: 11px;
+      color: var(--muted2);
+      margin-bottom: 4px;
+    }
+
+    .metaBox .v {
+      font-size: 12.8px;
+      color: rgba(255, 255, 255, .86);
+      word-break: break-word;
+    }
+
+    .stageBadge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, .12);
+      background: rgba(255, 255, 255, .05);
+      font-size: 12px;
+      color: rgba(255, 255, 255, .86);
+      white-space: nowrap;
+    }
+
+    .stageBadge .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--muted2);
+    }
+
+    .chatWrap {
+      display: flex;
+      flex-direction: column;
+      height: calc(100vh - 120px);
+      min-height: 620px;
+    }
+
+    .chat {
+      flex: 1;
+      padding: 16px;
+      overflow: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .bubble {
+      max-width: 78%;
+      padding: 12px;
+      border-radius: 16px;
+      border: 1px solid rgba(255, 255, 255, .10);
+      background: rgba(255, 255, 255, .06);
+      line-height: 1.35;
+      font-size: 13.5px;
+      position: relative;
+      animation: pop .18s ease-out both;
+    }
+
+    @keyframes pop {
+      from { opacity: 0; transform: translateY(6px) }
+      to { opacity: 1; transform: translateY(0) }
+    }
+
+    .bubble.user {
+      margin-left: auto;
+      background: rgba(124, 92, 255, .16);
+      border-color: rgba(124, 92, 255, .22);
+    }
+
+    .bubble.agent {
+      background: rgba(25, 211, 255, .10);
+      border-color: rgba(25, 211, 255, .18);
+    }
+
+    .bubble.system {
+      margin: 6px auto;
+      max-width: 92%;
+      text-align: center;
+      font-size: 12.5px;
+      color: var(--muted);
+      background: rgba(255, 255, 255, .04);
+    }
+
+    .bubble .meta {
+      margin-top: 8px;
+      font-size: 11px;
+      color: rgba(255, 255, 255, .55);
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .composer {
+      padding: 12px 14px 14px;
+      border-top: 1px solid rgba(255, 255, 255, .08);
+      background: rgba(0, 0, 0, .10);
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .composer input {
+      margin: 0;
+      flex: 1;
+      padding: 12px;
+      border-radius: 14px;
+    }
+
+    .toast {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid rgba(255, 255, 255, .14);
+      background: rgba(10, 12, 20, .72);
+      backdrop-filter: blur(12px);
+      box-shadow: 0 12px 40px rgba(0, 0, 0, .38);
+      color: rgba(255, 255, 255, .88);
+      font-size: 13px;
+      opacity: 0;
+      transform: translateY(8px);
+      transition: opacity .22s ease, transform .22s ease;
+      max-width: 360px;
+      z-index: 99;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* Typing indicator */
+    .typing-indicator {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 6px 2px;
+    }
+
+    .typing-indicator span {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: rgba(25, 211, 255, .55);
+      animation: typingBounce 1.2s ease-in-out infinite;
+    }
+
+    .typing-indicator span:nth-child(2) { animation-delay: .2s; }
+    .typing-indicator span:nth-child(3) { animation-delay: .4s; }
+
+    @keyframes typingBounce {
+      0%, 60%, 100% { transform: translateY(0); opacity: .4; }
+      30% { transform: translateY(-6px); opacity: 1; }
+    }
+
+    /* Inactivity timer bar */
+    .timerBar {
+      height: 3px;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      border-radius: 2px;
+      transition: width 1s linear;
+      margin: 0 16px;
+    }
+
+    .timerDisplay {
+      text-align: center;
+      font-size: 11px;
+      color: var(--muted2);
+      padding: 4px 0 0;
+    }
+
+    @media(max-width:980px) {
+      main { grid-template-columns: 1fr; }
+      .chatWrap { height: auto; min-height: 520px; }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="grain"></div>
+
+  <header>
+    <div class="brand">
+      <div class="logoDot"></div>
+      <div class="brandName">jobnova<span>.ai</span></div>
+    </div>
+    <div class="topRight">
+      <div class="pill"><span class="statusDot" id="statusDot"></span><span id="statusText">idle</span></div>
+      <div class="pill" id="stagePill">Stage: —</div>
+    </div>
+  </header>
+
+  <main>
+    <!-- Left sidebar: session controls -->
+    <section class="card">
+      <div class="cardHeader">
+        <div>
+          <h3>Session Control</h3>
+          <div class="sub">Create a session, then click Start to begin the interview.</div>
+        </div>
+        <div class="stageBadge" title="Current stage">
+          <span class="dot" id="stageDot"></span>
+          <span id="stageBadgeText">—</span>
+        </div>
+      </div>
+
+      <div class="cardBody">
+        <label>Candidate name</label>
+        <input id="candidateName" placeholder="e.g., Vansh" value="Vansh" />
+
+        <label>Target role</label>
+        <input id="roleName" placeholder="e.g., AI Algorithm Engineer Intern" value="AI Algorithm Engineer Intern" />
+
+        <div class="btnRow">
+          <button class="primary" id="btnCreate">Create Session</button>
+          <button class="ghost" id="btnCopy" disabled>Copy ID</button>
+        </div>
+
+        <div class="btnRow">
+          <button id="btnStart" disabled>▶ Start Interview</button>
+          <button id="btnReset" disabled>Reset</button>
+        </div>
+
+        <!-- Phase 4: Voice controls (does not break existing text mode) -->
+        <div class="btnRow">
+          <button id="btnVoice" disabled>🎙 Start Voice</button>
+          <button id="btnHangup" disabled>⏹ Hang up</button>
+        </div>
+
+        <div class="metaGrid">
+          <div class="metaBox">
+            <div class="k">Session ID</div>
+            <div class="v" id="sessionId">—</div>
+          </div>
+          <div class="metaBox">
+            <div class="k">Room name</div>
+            <div class="v" id="roomName">—</div>
+          </div>
+          <div class="metaBox">
+            <div class="k">Latency</div>
+            <div class="v" id="latencyDisplay">—</div>
+          </div>
+          <div class="metaBox">
+            <div class="k">Status</div>
+            <div class="v" id="sessionStatus">—</div>
+          </div>
+        </div>
+
+        <div class="tiny">
+          The AI interviewer (Taylor) will greet you and ask questions across
+          <b>intro → experience → done</b> stages. Keep answers concise — 2-4 sentences work best.
+          <br><br>
+          <b>Voice mode:</b> Connects to LiveKit and streams audio. In Phase 5, your local agent worker will join the room and speak.
+        </div>
+      </div>
+    </section>
+
+    <!-- Right: chat area -->
+    <section class="card chatWrap">
+      <div class="cardHeader">
+        <div>
+          <h3>Transcript</h3>
+          <div class="sub">Live interview — powered by Gemini.</div>
+        </div>
+      </div>
+      <div id="timerBarWrap" style="display:none;">
+        <div class="timerBar" id="timerBar" style="width:100%"></div>
+        <div class="timerDisplay" id="timerDisplay"></div>
+      </div>
+      <div class="chat" id="chat"></div>
+      <div class="composer">
+        <input id="userInput" placeholder="Type your answer here (Enter to send)" disabled />
+        <button class="primary" id="btnSend" disabled>Send</button>
+      </div>
+    </section>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+  <!-- Where we attach remote audio tracks (agent voice) -->
+  <div id="audioSink" style="display:none;"></div>
+
+  <script>
+    // ── DOM refs ──────────────────────────────────────────────────────────
+    const $ = id => document.getElementById(id);
+
+    const statusText = $("statusText");
+    const statusDot = $("statusDot");
+    const stagePill = $("stagePill");
+    const stageDot = $("stageDot");
+    const stageBadge = $("stageBadgeText");
+
+    const btnCreate = $("btnCreate");
+    const btnCopy = $("btnCopy");
+    const btnStart = $("btnStart");
+    const btnReset = $("btnReset");
+    const btnSend = $("btnSend");
+
+    // Phase 4 voice buttons
+    const btnVoice = $("btnVoice");
+    const btnHangup = $("btnHangup");
+    const audioSink = $("audioSink");
+
+    const sessionIdEl = $("sessionId");
+    const roomNameEl = $("roomName");
+    const latencyDisplay = $("latencyDisplay");
+    const sessionStatusEl = $("sessionStatus");
+    const timerBar = $("timerBar");
+    const timerBarWrap = $("timerBarWrap");
+    const timerDisplayEl = $("timerDisplay");
+
+    const chatEl = $("chat");
+    const userInput = $("userInput");
+    const toastEl = $("toast");
+
+    // ── State ─────────────────────────────────────────────────────────────
+    let sessionId = null;
+    let currentStage = null;
+    let pollingTimer = null;
+    let lastMsgCount = 0;
+    let isThinking = false;
+    let interviewStarted = false;
+
+    // Voice state (Phase 4)
+    let voiceRoom = null;
+    let voiceConnected = false;
+
+    // Inactivity timer
+    const INACTIVITY_INTRO_S = 90;
+    const INACTIVITY_EXP_S = 180;
+    let inactivityTimer = null;
+    let inactivityStart = null;
+    let inactivityDuration = 0;
+    let inactivityTick = null;
+
+    // ── Helpers ───────────────────────────────────────────────────────────
+    function toast(msg) {
+      toastEl.textContent = msg;
+      toastEl.classList.add("show");
+      setTimeout(() => toastEl.classList.remove("show"), 2200);
+    }
+
+    function setStatus(s, color) {
+      statusText.textContent = s;
+      statusDot.style.background = color || "rgba(255,255,255,.45)";
+    }
+
+    function stageColor(stage) {
+      if (stage === "intro") return "var(--accent2)";
+      if (stage === "experience") return "var(--accent)";
+      if (stage === "done") return "var(--good)";
+      return "rgba(255,255,255,.45)";
+    }
+
+    function updateStageUI(stage) {
+      currentStage = stage;
+      stagePill.textContent = "Stage: " + stage;
+      stageDot.style.background = stageColor(stage);
+      stageBadge.textContent = stage;
+    }
+
+    // ── Inactivity timer ─────────────────────────────────────────────────
+    function startInactivityTimer() {
+      clearInactivityTimer();
+      if (!interviewStarted || !currentStage || currentStage === "done") return;
+      inactivityDuration = currentStage === "intro" ? INACTIVITY_INTRO_S : INACTIVITY_EXP_S;
+      inactivityStart = Date.now();
+      timerBarWrap.style.display = "block";
+      timerBar.style.width = "100%";
+      timerDisplayEl.textContent = inactivityDuration + "s remaining";
+
+      inactivityTick = setInterval(() => {
+        const elapsed = (Date.now() - inactivityStart) / 1000;
+        const remaining = Math.max(0, inactivityDuration - elapsed);
+        const pct = Math.max(0, (remaining / inactivityDuration) * 100);
+        timerBar.style.width = pct + "%";
+        timerDisplayEl.textContent = Math.ceil(remaining) + "s remaining";
+      }, 1000);
+
+      inactivityTimer = setTimeout(async () => {
+        clearInactivityTimer();
+        if (currentStage === "done" || !sessionId) return;
+        toast("Moving to next stage due to inactivity…");
+        setStatus("transitioning…", "var(--warn)");
+        showTyping();
+        const out = await apiUiNextTurn({ session_id: sessionId, event_type: "timeout" });
+        hideTyping();
+        if (out) handleEngineResponse(out);
+        const data = await apiGetMessages();
+        if (data) renderMessages(data);
+      }, inactivityDuration * 1000);
+    }
+
+    function clearInactivityTimer() {
+      if (inactivityTimer) { clearTimeout(inactivityTimer); inactivityTimer = null; }
+      if (inactivityTick) { clearInterval(inactivityTick); inactivityTick = null; }
+      timerBarWrap.style.display = "none";
+    }
+
+    function resetInactivityTimer() {
+      if (interviewStarted && currentStage && currentStage !== "done") startInactivityTimer();
+    }
+
+    // ── Chat rendering ───────────────────────────────────────────────────
+    function renderMessages(data) {
+      const msgs = data.messages || [];
+      const stage = data.stage || "—";
+      updateStageUI(stage);
+      sessionStatusEl.textContent = data.status || "—";
+      if (msgs.length === lastMsgCount) return;
+      lastMsgCount = msgs.length;
+      chatEl.innerHTML = "";
+      for (const m of msgs) {
+        const role = m.role || "system";
+        const div = document.createElement("div");
+        div.className = "bubble " + role;
+        const safe = (m.text || "").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+        div.innerHTML =
+          '<div>' + safe + '</div>' +
+          '<div class="meta"><span>' + role.toUpperCase() + ' · ' + (m.stage || "") + '</span>' +
+          '<span>' + (m.created_at ? new Date(m.created_at).toLocaleTimeString() : "") + '</span></div>';
+        chatEl.appendChild(div);
+      }
+      chatEl.scrollTop = chatEl.scrollHeight;
+    }
+
+    // ── Typing indicator ─────────────────────────────────────────────────
+    function showTyping() {
+      isThinking = true;
+      userInput.disabled = true;
+      btnSend.disabled = true;
+      const old = document.getElementById('typingBubble');
+      if (old) old.remove();
+      const div = document.createElement('div');
+      div.id = 'typingBubble';
+      div.className = 'bubble agent';
+      div.innerHTML = '<div class="typing-indicator"><span></span><span></span><span></span></div>';
+      chatEl.appendChild(div);
+      chatEl.scrollTop = chatEl.scrollHeight;
+    }
+
+    function hideTyping() {
+      isThinking = false;
+      const el = document.getElementById('typingBubble');
+      if (el) el.remove();
+    }
+
+    // ── Handle engine response ────────────────────────────────────────────
+    function handleEngineResponse(out) {
+      if (out.done) {
+        setStatus("ended", "var(--good)");
+        userInput.disabled = true;
+        btnSend.disabled = true;
+        btnStart.disabled = true;
+        clearInactivityTimer();
+        toast("Interview complete!");
+      } else {
+        setStatus("running", "var(--accent2)");
+
+        // If voice is connected, keep typing disabled (voice-only mode).
+        if (voiceConnected) {
+          userInput.disabled = true;
+          btnSend.disabled = true;
+        } else {
+          userInput.disabled = false;
+          btnSend.disabled = false;
+          userInput.focus();
+        }
+        resetInactivityTimer();
+      }
+    }
+
+    // ── API calls ─────────────────────────────────────────────────────────
+    async function apiCreateSession() {
+      const candidate_name = $("candidateName").value.trim() || "Candidate";
+      const role = $("roleName").value.trim() || "AI Algorithm Engineer Intern";
+      setStatus("creating…", "var(--warn)");
+      const res = await fetch("/api/interview/sessions/create/", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ candidate_name, role })
+      });
+      if (!res.ok) { setStatus("error", "var(--bad)"); toast("Create failed"); return null; }
+      return await res.json();
+    }
+
+    async function apiGetMessages() {
+      if (!sessionId) return null;
+      const res = await fetch("/api/interview/sessions/" + sessionId + "/messages/");
+      if (!res.ok) return null;
+      return await res.json();
+    }
+
+    async function apiUiNextTurn(payload) {
+      const t0 = performance.now();
+      const res = await fetch("/api/interview/ui/next_turn/", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const ms = Math.round(performance.now() - t0);
+      latencyDisplay.textContent = ms + " ms";
+      if (!res.ok) { toast("Turn failed"); return null; }
+      return await res.json();
+    }
+
+    // Phase 4: get LiveKit token for the session room
+    async function apiLivekitToken() {
+      if (!sessionId) return null;
+      const res = await fetch("/api/interview/livekit/token/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: sessionId })
+      });
+      if (!res.ok) return null;
+      return await res.json();
+    }
+
+    function startPolling() {
+      if (pollingTimer) clearInterval(pollingTimer);
+      pollingTimer = setInterval(async () => {
+        const data = await apiGetMessages();
+        if (data) renderMessages(data);
+      }, 2000);
+    }
+
+    // ── Phase 4: Voice connect/disconnect ─────────────────────────────────
+    function getLivekitGlobals() {
+      // UMD globals vary by build; handle common ones safely.
+      return window.livekit || window.LivekitClient || window.LiveKitClient || null;
+    }
+
+    async function connectVoice() {
+      if (!sessionId || voiceConnected) return;
+
+      const LK = getLivekitGlobals();
+      if (!LK || !LK.Room || !LK.RoomEvent) {
+        toast("LiveKit client not loaded");
+        return;
+      }
+
+      const lk = await apiLivekitToken();
+      if (!lk || !lk.url || !lk.token) {
+        toast("LiveKit token failed");
+        return;
+      }
+
+      // Clean any old audio elements
+      audioSink.innerHTML = "";
+
+      voiceRoom = new LK.Room();
+
+      voiceRoom.on(LK.RoomEvent.TrackSubscribed, (track) => {
+        if (track && track.kind === "audio") {
+          const el = track.attach();
+          el.autoplay = true;
+          el.controls = false;
+          audioSink.appendChild(el);
+        }
+      });
+
+      voiceRoom.on(LK.RoomEvent.Disconnected, () => {
+        // If disconnected unexpectedly, reset UI back to safe state
+        voiceConnected = false;
+        btnHangup.disabled = true;
+        btnVoice.disabled = false;
+
+        // restore text input only if interview is running & not done
+        if (interviewStarted && currentStage && currentStage !== "done") {
+          userInput.disabled = false;
+          btnSend.disabled = false;
+          userInput.focus();
+        }
+        setStatus("ready", "var(--good)");
+        toast("Voice disconnected");
+      });
+
+      setStatus("connecting voice…", "var(--warn)");
+
+      try {
+        await voiceRoom.connect(lk.url, lk.token);
+        await voiceRoom.localParticipant.setMicrophoneEnabled(true);
+      } catch (e) {
+        voiceRoom = null;
+        setStatus("error", "var(--bad)");
+        toast("Voice connect failed");
+        return;
+      }
+
+      voiceConnected = true;
+
+      // Voice mode should not harm text mode — but we disable typing while connected (your requirement).
+      userInput.disabled = true;
+      btnSend.disabled = true;
+
+      btnVoice.disabled = true;
+      btnHangup.disabled = false;
+
+      // Optional: disable Start Interview button to avoid double-start in Phase 5
+      btnStart.disabled = true;
+
+      setStatus("voice running", "var(--accent2)");
+      toast("Voice connected");
+    }
+
+    async function disconnectVoice() {
+      if (!voiceRoom) return;
+      setStatus("disconnecting…", "var(--warn)");
+      try { await voiceRoom.disconnect(); } catch (e) {}
+      voiceRoom = null;
+      voiceConnected = false;
+
+      btnHangup.disabled = true;
+      btnVoice.disabled = false;
+
+      // restore typing only if interview is running & not done
+      if (interviewStarted && currentStage && currentStage !== "done") {
+        userInput.disabled = false;
+        btnSend.disabled = false;
+        userInput.focus();
+      }
+
+      setStatus("ready", "var(--good)");
+      toast("Voice disconnected");
+    }
+
+    btnVoice.addEventListener("click", connectVoice);
+    btnHangup.addEventListener("click", disconnectVoice);
+
+    // ── Reset ─────────────────────────────────────────────────────────────
+    async function resetUI() {
+      // clean voice if active
+      if (voiceRoom) {
+        try { await voiceRoom.disconnect(); } catch (e) {}
+      }
+      voiceRoom = null;
+      voiceConnected = false;
+      audioSink.innerHTML = "";
+
+      sessionId = null; currentStage = null; lastMsgCount = 0;
+      interviewStarted = false;
+      if (pollingTimer) clearInterval(pollingTimer);
+      pollingTimer = null;
+      clearInactivityTimer();
+
+      sessionIdEl.textContent = "—";
+      roomNameEl.textContent = "—";
+      latencyDisplay.textContent = "—";
+      sessionStatusEl.textContent = "—";
+
+      stagePill.textContent = "Stage: —";
+      stageDot.style.background = "rgba(255,255,255,.45)";
+      stageBadge.textContent = "—";
+
+      chatEl.innerHTML = "";
+      userInput.value = "";
+      userInput.disabled = true;
+      btnSend.disabled = true;
+      btnStart.disabled = true;
+      btnCopy.disabled = true;
+      btnReset.disabled = true;
+
+      // voice buttons reset
+      btnVoice.disabled = true;
+      btnHangup.disabled = true;
+
+      setStatus("idle", "rgba(255,255,255,.45)");
+    }
+
+    // ── Button handlers ───────────────────────────────────────────────────
+    btnCreate.addEventListener("click", async () => {
+      await resetUI();
+      const data = await apiCreateSession();
+      if (!data) return;
+      sessionId = data.session_id;
+      sessionIdEl.textContent = sessionId;
+      roomNameEl.textContent = data.room_name;
+      sessionStatusEl.textContent = data.status;
+      updateStageUI(data.stage);
+      btnStart.disabled = false;
+      btnCopy.disabled = false;
+      btnReset.disabled = false;
+
+      // Phase 4: voice enabled after session exists
+      btnVoice.disabled = false;
+      btnHangup.disabled = true;
+
+      startPolling();
+      setStatus("ready", "var(--good)");
+      toast("Session created — click Start");
+    });
+
+    btnCopy.addEventListener("click", async () => {
+      if (!sessionId) return;
+      try { await navigator.clipboard.writeText(sessionId); toast("Copied"); }
+      catch (e) { toast("Clipboard blocked"); }
+    });
+
+    btnReset.addEventListener("click", async () => { await resetUI(); toast("Reset"); });
+
+    btnStart.addEventListener("click", async () => {
+      if (!sessionId) return;
+      btnStart.disabled = true;
+      setStatus("starting…", "var(--warn)");
+      showTyping();
+      const out = await apiUiNextTurn({ session_id: sessionId, event_type: "start" });
+      hideTyping();
+      if (!out) { setStatus("error", "var(--bad)"); return; }
+      interviewStarted = true;
+      toast("Interview started!");
+      handleEngineResponse(out);
+      const data = await apiGetMessages();
+      if (data) renderMessages(data);
+    });
+
+    // ── Send user message ─────────────────────────────────────────────────
+    async function sendUserTurn() {
+      const text = userInput.value.trim();
+      if (!text || !sessionId || isThinking) return;
+      userInput.value = "";
+      setStatus("thinking…", "var(--warn)");
+      showTyping();
+      clearInactivityTimer();
+
+      const out = await apiUiNextTurn({
+        session_id: sessionId,
+        event_type: "user_turn",
+        user_text: text,
+        event_id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now())
+      });
+      hideTyping();
+
+      if (!out) {
+        setStatus("error", "var(--bad)");
+        if (!voiceConnected) {
+          userInput.disabled = false;
+          btnSend.disabled = false;
+          userInput.focus();
+        }
+        resetInactivityTimer();
+        return;
+      }
+      handleEngineResponse(out);
+      const data = await apiGetMessages();
+      if (data) renderMessages(data);
+    }
+
+    btnSend.addEventListener("click", sendUserTurn);
+    userInput.addEventListener("keydown", e => { if (e.key === "Enter") sendUserTurn(); });
+
+    // init
+    resetUI();
+  </script>
+</body>
+
+</html>
