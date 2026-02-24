@@ -1,93 +1,172 @@
-# InterviewOS: Multi-Modal Agentic Interviewer (Voice + Text)
+# InterviewOS — Multi-Modal Agentic Mock Interview (Text + Voice)
 
-**InterviewOS** is an end-to-end mock interview system that supports both **text interviews** (web UI) and **real-time voice interviews** (mic → STT → agent → TTS), while persisting a complete transcript and interview state in the backend.
+A product-style mock interview system that supports **text interviews** (web UI) and **real-time voice interviews** (mic → STT → backend engine → TTS) while persisting a complete transcript and session state in a database.
 
----
-
-## 🔥 Why this project
-Most mock interview apps either:
-- do **text only**, or
-- do **voice only** without reliable stage control, persistence, or fallbacks.
-
-InterviewOS is built like a real product feature: **stateful**, **recoverable**, and **orchestrated** across multiple AI components.
+> **Key idea:** The **Django backend is the single source of truth** for interview logic.  
+> Voice is an “overhead layer” (LiveKit + local agent worker) that **routes** audio to/from the same backend engine that powers text mode.
 
 ---
 
-## 🧩 High-Level Architecture (Agentic Orchestration)
+## Demo Modes
 
-### 1) Client (Web UI)
-- `demo.html` provides **two modes**:
-  - **Text Mode:** user types answers → UI calls backend for next turn.
-  - **Voice Mode:** user joins a LiveKit room → mic streams audio → transcript appears live.
+### 1) Text Mode (Phase 3)
+- Use the web UI (`demo.html`) to:
+  - Create session
+  - Start interview
+  - Type answers and receive interviewer responses
+- Transcript updates live from DB.
 
-### 2) Realtime Voice Layer (LiveKit)
-- LiveKit handles:
-  - realtime audio transport (WebRTC)
-  - **STT** (speech → text)
-  - **TTS** (text → speech)
-- A local **LiveKit Agent worker** joins the room automatically and acts as a **thin routing agent**.
-
-### 3) Interview Brain (Django + LangGraph + Gemini)
-- The backend provides the **single source of truth** for interview logic.
-- A **LangGraph controller** enforces stage rules and transitions.
-- Gemini generates the actual interviewer prompts.
-- Every message is stored as persistent history (`InterviewSession` + `InterviewMessage`).
+### 2) Voice Mode (Phase 4 + 5)
+- Use the same web UI (`demo.html`) to:
+  - Create session
+  - Click **Start Voice**
+  - Speak answers (STT) and hear the interviewer (TTS)
+- Transcript is still shown live from DB, identical to text mode.
 
 ---
 
-## ✅ Core Features
-- **Multi-Modal Interview:** seamless **Text + Voice** interview experience.
-- **Two-stage flow:** Implements:
-  - **Self-Introduction**
-  - **Past Experience**
-- **Smooth transitions:** deterministic switching logic, no prompt conflicts.
-- **Time-based fallback:** if switching logic isn’t triggered, the backend forces a safe transition so the workflow never stalls.
-- **Anti-repeat guardrails:** fingerprinting + retry/fallback logic prevents repetitive questions.
-- **Persistent “session memory”:** full transcript and state are stored with timestamps + stage labels.
-- **Secure ingestion:** voice worker calls backend through a protected endpoint using `X-INGEST-SECRET`.
+## High-Level Architecture (Agentic Orchestration)
+
+### Components
+1) **Frontend UI (demo.html)**
+- Text mode: calls backend UI endpoint for turn-by-turn interview.
+- Voice mode: connects to LiveKit using a token from backend.
+- Transcript panel polls backend messages endpoint.
+
+2) **Backend (Django)**
+- Stores session + messages.
+- Runs the interview engine for every next turn.
+- Enforces time-based fallback transitions so the interview never gets stuck.
+
+3) **Interview Engine (engine.py)**
+- Uses **Google GenAI SDK** (`google.genai`) for generation.
+- Maintains interview stages using:
+  - **LLM “signal tokens”** at the end of every model reply:
+    - `<<<STAY>>>`
+    - `<<<MOVE_TO_EXPERIENCE>>>`
+    - `<<<MOVE_TO_DONE>>>`
+  - **Hard guardrails** based on agent turn counts per stage.
+  - **Timeout fallback** driven by backend (views.py).
+
+4) **Voice Worker (LiveKit Agent Worker: agent.py)**
+- A local agent worker joins the LiveKit room (dispatched via token endpoint).
+- Uses **STT** to transcribe your speech into text.
+- Calls Django engine endpoint (`/api/interview/engine/next_turn/`).
+- Speaks backend’s `assistant_text` via **TTS**.
 
 ---
 
-## 🔁 Voice Pipeline (How voice mode works)
-1. User clicks **Start Voice** in `demo.html`.
-2. UI fetches a **LiveKit token** from Django and joins the room.
-3. LiveKit Agent worker is dispatched automatically and joins the same room.
-4. Worker calls backend `/engine/next_turn/` with `event_type="start"`.
-5. Backend returns `assistant_text` → worker sends it to **TTS** → user hears it.
-6. User speaks → LiveKit runs **STT** → transcript produced.
-7. Worker sends transcript to backend (`event_type="user_turn"`).
-8. Backend returns next `assistant_text` → TTS speaks it.
-9. Transcript is visible live in the UI from DB polling.
+## State Machine (How Stages Work)
+
+Current stages:
+- `intro` → self-introduction
+- `experience` → past experience deep dive
+- `done` → wrap-up feedback
+
+### How transitions happen today (no LangGraph)
+This project does **not** use LangGraph.  
+Instead, stage transitions are implemented as:
+
+1) **LLM-driven signals**
+- The system prompt requires the model to end every reply with a signal token:
+  - `<<<STAY>>>` (continue stage)
+  - `<<<MOVE_TO_EXPERIENCE>>>` (intro → experience)
+  - `<<<MOVE_TO_DONE>>>` (experience → done)
+
+2) **Guardrails (hard fallback)**
+- Backend counts interviewer turns per stage.
+- If max turns exceeded, it forces stage transitions even if LLM didn’t signal.
+
+3) **Time-based fallback**
+- Backend checks how long the stage has been running.
+- If exceeded, it forces `event_type="timeout"` into the engine so the interview never stalls.
+
+> **Future upgrade path (optional):**  
+> If you add **non-linear** states (branching flows: behavioral vs system design vs coding, retries, scoring loops), migrating the controller to **LangGraph** becomes useful because it formalizes graph-based routing and makes complex transitions easier to reason about.  
+> Today, the state space is intentionally small and mostly linear, so a lightweight “signal + guardrails + timeout” controller is sufficient.
 
 ---
 
-## 🧠 “Multi-Agent / Multi-AI Orchestration” (Recruiter Keywords, accurately framed)
-This system is **agentic AI orchestration** across multiple specialized AI components:
+## Data Model
 
-- **STT model** (speech-to-text)
-- **LLM orchestration + generation** (LangGraph controller + Gemini)
-- **TTS model** (text-to-speech)
-- **Realtime orchestration layer** (LiveKit)
+### InterviewSession
+- `room_name` (LiveKit room identifier)
+- `candidate_name`, `role`
+- `status` (`created/running/ended/error`)
+- `stage` (`intro/experience/done`)
+- `stage_started_at`, `last_turn_at`, `ended_at`
 
-Even though the voice worker behaves like a single router agent, the overall design is a **multi-model, multi-service orchestration pipeline** (multi-modal agentic system).
-
----
-
-## 🛠 Tech Stack
-- **Frontend:** HTML/CSS/JS (text + voice UI)
-- **Backend:** Django (REST endpoints + DB persistence)
-- **State Machine:** LangGraph
-- **LLM:** Gemini
-- **Realtime Voice:** LiveKit
-- **STT/TTS:** LiveKit-integrated providers (configurable)
+### InterviewMessage
+- `session` FK
+- `role` (`user/agent/system`)
+- `stage`
+- `text`
+- `meta` (stores `event_id` for idempotency)
 
 ---
 
-## ⭐ What makes it “product-grade”
-- deterministic stage transitions + fallbacks
-- persistent transcript + replayable sessions
-- secure tool ingestion for voice agent
-- separation of concerns:
-  - LiveKit = real-time voice IO
-  - Django + LangGraph = interview “brain”
-  - UI = unified transcript view (text or voice)
+## API Endpoints
+
+### Core
+- `POST /api/interview/sessions/create/`
+  - creates a session + initial system message
+
+- `GET /api/interview/sessions/<session_id>/messages/`
+  - returns transcript + session info
+
+### Interview Engine
+- `POST /api/interview/engine/next_turn/`
+  - **protected** with header: `X-INGEST-SECRET`
+  - used by voice worker (and any ingestion client)
+  - supports: `event_type = start | user_turn | timeout`
+
+- `POST /api/interview/ui/next_turn/`
+  - text-mode endpoint for browser testing
+  - only enabled when `DEBUG=True`
+
+### LiveKit Token (Phase 4)
+- `POST /api/interview/livekit/token/`
+  - returns `{ url, token, room_name }` so the browser can connect to LiveKit
+  - also dispatches the agent worker job (RoomConfiguration / RoomAgentDispatch)
+
+---
+
+## Local Setup
+
+### 1) Backend env (`backend/.env`)
+
+
+```env
+LIVEKIT_URL=...
+LIVEKIT_API_KEY=...
+LIVEKIT_API_SECRET=...
+
+AGENT_NAME=...
+INGEST_SECRET=...
+
+GOOGLE_API_KEY=...
+GEMINI_MODEL=gemini-2.5-flash
+GEMINI_TEMPERATURE=0.7
+GEMINI_MAX_OUTPUT_TOKENS=280
+
+INTRO_TIMEOUT_S=90
+EXPERIENCE_TIMEOUT_S=180
+MAX_INTRO_TURNS=7
+MAX_EXP_TURNS=14
+
+
+### 2) Agent env (`agent/.env.local`)
+
+
+```env
+LIVEKIT_URL=...
+LIVEKIT_API_KEY=...
+LIVEKIT_API_SECRET=...
+AGENT_NAME=...
+INGEST_SECRET=...
+GOOGLE_API_KEY=...
+INTRO_TIMEOUT_S=90
+EXPERIENCE_TIMEOUT_S=180
+GEMINI_MODEL=gemini-2.5-flash
+
+BACKEND_BASE_URL=http://127.0.0.1:8000
