@@ -14,23 +14,32 @@ with hard guard-rails as fallback.
 """
 from __future__ import annotations
 
+import logging
 import os
 import re
 import time
-import traceback
 from typing import List, Dict, Any
 
+from django.conf import settings
 from google import genai
 from google.genai import types
 
-# ---------------------------------------------------------------------------
-# Client config
-# ---------------------------------------------------------------------------
-_API_KEY = os.getenv("GOOGLE_API_KEY", "")
-_client = genai.Client(api_key=_API_KEY)
+logger = logging.getLogger("interview.engine")
 
-MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
-MODEL_FALLBACKS = [MODEL_NAME, "gemini-2.5-flash-lite", "gemini-2.0-flash-lite"]
+# ---------------------------------------------------------------------------
+# Client config (lazy init — always uses current settings)
+# ---------------------------------------------------------------------------
+_client = None
+
+def _get_client() -> genai.Client:
+    global _client
+    key = getattr(settings, "GOOGLE_API_KEY", "") or os.getenv("GOOGLE_API_KEY", "")
+    if _client is None or getattr(_client, "_api_key_used", None) != key:
+        _client = genai.Client(api_key=key)
+        _client._api_key_used = key  # type: ignore[attr-defined]
+    return _client
+
+MODEL_NAME = getattr(settings, "GEMINI_MODEL", None) or os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 TEMPERATURE = float(os.getenv("GEMINI_TEMPERATURE", "0.7"))
 MAX_TOKENS = int(os.getenv("GEMINI_MAX_OUTPUT_TOKENS", "280"))
 
@@ -225,14 +234,19 @@ def run_engine(
             ),
         )
 
-    # Call Gemini (with model fallback for rate limits)
+    # Call Gemini with retry + backoff for rate limits
     raw_text = ""
     t0 = time.time()
     last_err = None
-    for model_name in MODEL_FALLBACKS:
+    client = _get_client()
+
+    MAX_RETRIES = 1
+    RETRY_WAIT = 8  # seconds — quick retry, then fallback
+
+    for attempt in range(MAX_RETRIES + 1):
         try:
-            response = _client.models.generate_content(
-                model=model_name,
+            response = client.models.generate_content(
+                model=MODEL_NAME,
                 contents=contents,
                 config=types.GenerateContentConfig(
                     system_instruction=system,
@@ -242,34 +256,46 @@ def run_engine(
             )
             raw_text = response.text or ""
             elapsed = time.time() - t0
-            print(f"[engine] OK {model_name} in {elapsed:.2f}s | stage={stage} | len={len(raw_text)}")
+            logger.info(f"OK {MODEL_NAME} in {elapsed:.2f}s | stage={stage} | len={len(raw_text)}")
             last_err = None
             break
         except Exception as e:
             last_err = e
             err_str = str(e)
             if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
-                print(f"[engine] {model_name} rate-limited, trying next model...")
-                continue
+                if attempt < MAX_RETRIES:
+                    logger.warning(f"{MODEL_NAME} rate-limited, waiting {RETRY_WAIT}s (attempt {attempt+1}/{MAX_RETRIES+1})")
+                    time.sleep(RETRY_WAIT)
+                else:
+                    logger.warning(f"{MODEL_NAME} rate-limited, out of retries")
             else:
-                print(f"[engine] {model_name} error: {e}")
-                break
+                logger.error(f"{MODEL_NAME} error: {err_str[:200]}")
+                break  # non-retryable error
+
     if last_err:
         elapsed = time.time() - t0
-        print(f"[engine] Gemini FAILED in {elapsed:.2f}s: {last_err}")
-        traceback.print_exc()
-        # Fallback responses
+        logger.error(f"Gemini FAILED in {elapsed:.2f}s (all retries exhausted)")
+
+        # Varied fallback responses — rotate based on turn count to avoid repetition
+        agent_count = _count(history, "agent", stage)
         if stage == "intro":
-            raw_text = (
-                f"Hi {candidate_name}! Welcome — I'm excited to chat with you about "
-                f"the {role_name} position. Could you kick things off by telling me "
-                f"a bit about yourself? <<<STAY>>>"
-            )
+            intro_fallbacks = [
+                f"Hi {candidate_name}! Welcome — I'm excited to chat. Could you kick things off by telling me a bit about yourself? <<<STAY>>>",
+                f"Thanks for joining, {candidate_name}. What drew you to the {role_name} position? <<<STAY>>>",
+                f"That's great. What would you say is your strongest technical skill relevant to {role_name}? <<<STAY>>>",
+                f"Interesting background! What excites you most about this field? <<<STAY>>>",
+                f"Nice! Let's dive into your past experience now. <<<MOVE_TO_EXPERIENCE>>>",
+            ]
+            raw_text = intro_fallbacks[min(agent_count, len(intro_fallbacks) - 1)]
         elif stage == "experience":
-            raw_text = (
-                "I'd love to hear about a project you've worked on recently. "
-                "What was the problem you were solving, and what was your role? <<<STAY>>>"
-            )
+            exp_fallbacks = [
+                "I'd love to hear about a project you've worked on recently. What was the problem? <<<STAY>>>",
+                "Tell me more about the technical decisions you made in that project. <<<STAY>>>",
+                "What was the biggest challenge you faced, and how did you handle it? <<<STAY>>>",
+                "What impact did your work have? Any metrics you can share? <<<STAY>>>",
+                "That's really solid work. Let me wrap things up with some feedback. <<<MOVE_TO_DONE>>>",
+            ]
+            raw_text = exp_fallbacks[min(agent_count, len(exp_fallbacks) - 1)]
         else:
             raw_text = (
                 "Thanks for a great conversation!\n\n"

@@ -136,13 +136,18 @@ server.setup_fnc = prewarm
 @server.rtc_session(agent_name=AGENT_NAME)
 async def entrypoint(ctx: JobContext):
     session = AgentSession(
-        # These inference providers use your LiveKit Cloud integrations
         stt=inference.STT(model="deepgram/nova-3", language="en"),
-        llm=inference.LLM(model="google/gemini-2.5-flash"),  # not used (we override llm_node)
+        # The pipeline requires an LLM to be configured so it knows to call
+        # llm_node(). Our llm_node() override intercepts ALL inference and
+        # routes to our Django engine instead — this LLM is never used directly.
+        llm=inference.LLM(model="google/gemini-2.5-flash"),
         tts=inference.TTS(model="cartesia/sonic-3", language="en"),
         turn_detection=MultilingualModel(),
         vad=ctx.proc.userdata["vad"],
-        preemptive_generation=False,   # more stable for interview demo
+        # Wait 6 seconds of silence before considering user done speaking.
+        # This prevents cutting off mid-sentence during natural pauses.
+        min_endpointing_delay=6.0,
+        preemptive_generation=False,
     )
 
     await session.start(

@@ -7,7 +7,6 @@ from django.views.decorators.http import require_http_methods
 from django.template import loader
 from django.template import TemplateDoesNotExist
 from django.utils import timezone
-from requests import session
 
 from .models import InterviewSession, InterviewMessage
 from .engine import run_engine
