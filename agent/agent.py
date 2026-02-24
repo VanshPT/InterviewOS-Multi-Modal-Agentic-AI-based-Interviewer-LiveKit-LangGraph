@@ -1,4 +1,3 @@
-import asyncio
 import json
 import logging
 import os
@@ -14,7 +13,6 @@ from livekit.agents import (
     AgentSession,
     JobContext,
     JobProcess,
-    RunContext,
     ToolError,
     cli,
     inference,
@@ -28,7 +26,7 @@ from livekit.plugins.turn_detector.multilingual import MultilingualModel
 logger = logging.getLogger("jobnova-router")
 logging.basicConfig(level=logging.INFO)
 
-# Load agent env
+# Load agent env (in your agent folder)
 load_dotenv(".env.local")
 
 BACKEND_BASE_URL = os.getenv("BACKEND_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
@@ -37,9 +35,7 @@ AGENT_NAME = os.getenv("AGENT_NAME", "Taylor-23fe")
 
 
 async def call_engine(session_id: str, event_type: str, user_text: str = "") -> dict:
-    """
-    Calls Django /api/interview/engine/next_turn/ and returns parsed JSON.
-    """
+    """Calls Django /api/interview/engine/next_turn/ and returns parsed JSON."""
     url = f"{BACKEND_BASE_URL}/api/interview/engine/next_turn/"
     headers = {
         "Content-Type": "application/json",
@@ -57,17 +53,15 @@ async def call_engine(session_id: str, event_type: str, user_text: str = "") -> 
     async with session.post(url, timeout=timeout, headers=headers, json=payload) as resp:
         txt = await resp.text()
         if resp.status >= 400:
-            raise ToolError(f"engine HTTP {resp.status}: {txt[:200]}")
+            raise ToolError(f"engine HTTP {resp.status}: {txt[:300]}")
         try:
             return json.loads(txt)
         except json.JSONDecodeError:
-            raise ToolError(f"engine returned non-JSON: {txt[:200]}")
+            raise ToolError(f"engine returned non-JSON: {txt[:300]}")
 
 
 class RouterAgent(Agent):
-    """
-    Thin router: never improvises. Always speaks assistant_text from backend.
-    """
+    """Thin router: speaks only assistant_text returned by backend."""
     def __init__(self, metadata: str) -> None:
         super().__init__(instructions="You are a thin router. Do not improvise.")
         self.meta_raw = metadata or "{}"
@@ -76,7 +70,6 @@ class RouterAgent(Agent):
         self._pending_user_text: Optional[str] = None
 
     def _parse_session_id(self) -> str:
-        # Job metadata comes from RoomAgentDispatch.metadata (JSON string)
         try:
             meta = json.loads(self.meta_raw)
             sid = (meta.get("session_id") or "").strip()
@@ -84,13 +77,12 @@ class RouterAgent(Agent):
                 raise ValueError("missing session_id")
             return sid
         except Exception as e:
-            raise RuntimeError(f"Bad job metadata; need session_id JSON. err={e}")
+            raise RuntimeError(f"Bad job metadata; need JSON with session_id. err={e}")
 
     async def on_enter(self):
-        # Called when agent starts in room
         self.session_id = self._parse_session_id()
 
-        # Start interview immediately (no waiting for user speech)
+        # Start interview immediately
         if not self._did_start:
             self._did_start = True
             out = await call_engine(self.session_id, "start", "")
@@ -99,16 +91,21 @@ class RouterAgent(Agent):
                 await self.session.say(text, allow_interruptions=False)
 
     async def on_user_turn_completed(self, turn_ctx: llm.ChatContext, new_message: llm.ChatMessage) -> None:
-        # Save final transcript; the response will be produced by llm_node override below
-        self._pending_user_text = (new_message.text_content() or "").strip()
+        # FIX: text_content is a property in Python (string), not a function.
+        txt = ""
+        try:
+            # Most versions: property
+            txt = getattr(new_message, "text_content", "") or ""
+            # Some versions could expose method (defensive)
+            if callable(txt):
+                txt = txt()
+        except Exception:
+            # Fallbacks
+            txt = getattr(new_message, "text", "") or ""
 
-    async def llm_node(
-        self,
-        chat_ctx: llm.ChatContext,
-        tools: list,
-        model_settings,
-    ):
-        # Replace LLM inference entirely: call backend, yield assistant_text
+        self._pending_user_text = str(txt).strip()
+
+    async def llm_node(self, chat_ctx: llm.ChatContext, tools: list, model_settings):
         if not self.session_id:
             self.session_id = self._parse_session_id()
 
@@ -137,16 +134,21 @@ server.setup_fnc = prewarm
 async def entrypoint(ctx: JobContext):
     session = AgentSession(
         stt=inference.STT(model="deepgram/nova-3", language="en"),
-        # The pipeline requires an LLM to be configured so it knows to call
-        # llm_node(). Our llm_node() override intercepts ALL inference and
-        # routes to our Django engine instead — this LLM is never used directly.
+        # This is required by the pipeline; we override llm_node so it won't improvise.
         llm=inference.LLM(model="google/gemini-2.5-flash"),
         tts=inference.TTS(model="cartesia/sonic-3", language="en"),
+
+        # Turn detection + timing
         turn_detection=MultilingualModel(),
         vad=ctx.proc.userdata["vad"],
-        # Wait 6 seconds of silence before considering user done speaking.
-        # This prevents cutting off mid-sentence during natural pauses.
+
+        # Your UX requirement: give ~6s pause before finalizing a turn
         min_endpointing_delay=6.0,
+        max_endpointing_delay=8.0,
+
+        # Avoid silence/deadlock from barge-in while stabilizing
+        allow_interruptions=False,
+
         preemptive_generation=False,
     )
 
